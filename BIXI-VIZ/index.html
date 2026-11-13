@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Viajes BIXI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Un día en BIXI Montréal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script type="importmap">
   {
     "imports": {
@@ -12,8 +16,180 @@
     }
   }
   </script>
+  <style>
+    :root {
+      --ink: #070b14;
+      --panel: rgba(10, 16, 28, 0.74);
+      --line: rgba(160, 185, 220, 0.18);
+      --text: #e6edf7;
+      --dim: #8fa0b8;
+      --amber: #ffb347;
+      --cyan: #46d9ff;
+      font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    html, body { margin: 0; height: 100%; background: var(--ink); color: var(--text); overflow: hidden; }
+    #escena, #escena canvas { display: block; }
+
+    /* Oscurece los bordes para que el mapa se funda con el fondo */
+    #vineta {
+      position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse at 50% 45%, transparent 52%, rgba(7, 11, 20, 0.9) 100%);
+    }
+
+    #titulo { position: fixed; top: 20px; left: 24px; pointer-events: none; }
+    #titulo h1 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: 0.01em; }
+    #fecha { margin: 3px 0 0; font-size: 13px; color: var(--dim); }
+
+    #reloj { position: fixed; left: 24px; bottom: 124px; }
+    #hora {
+      font-size: clamp(52px, 8vw, 104px); font-weight: 300; line-height: 1;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    }
+    #datos { display: flex; align-items: flex-end; gap: 24px; margin-top: 10px; }
+    #datos div { display: flex; flex-direction: column; }
+    #datos b { font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+    #datos span { font-size: 12px; color: var(--dim); }
+    #play {
+      font: inherit; font-size: 13px; color: var(--text); background: transparent;
+      border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer;
+    }
+    #play:hover { background: rgba(255, 255, 255, 0.06); }
+    #play:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+    #tarjeta {
+      position: fixed; right: 24px; bottom: 124px; max-width: min(320px, 80vw);
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+      padding: 12px 16px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    #tarjeta[hidden] { display: none; }
+    #t-nombre { display: block; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+    #t-datos { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+    #linea { position: fixed; left: 24px; right: 24px; bottom: 28px; }
+    #hist { display: block; width: 100%; height: 58px; cursor: ew-resize; touch-action: none; }
+    #ejes { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: var(--dim); }
+
+    #credito { position: fixed; right: 12px; bottom: 5px; font-size: 11px; color: var(--dim); opacity: 0.8; }
+
+    /* Panel de ajustes con la misma paleta */
+    .lil-gui.root {
+      --background-color: rgba(10, 16, 28, 0.86);
+      --title-background-color: rgba(255, 255, 255, 0.05);
+      --text-color: #cfd9e8;
+      --title-text-color: #e6edf7;
+      --widget-color: #1b2638;
+      --hover-color: #25344d;
+      --focus-color: #2c3d5a;
+      --number-color: #46d9ff;
+      --string-color: #ffb347;
+      --font-family: "IBM Plex Sans", system-ui, sans-serif;
+      --font-size: 12px;
+    }
+
+    #modos { display: flex; gap: 6px; margin-top: 10px; pointer-events: auto; }
+    .modo {
+      font: inherit; font-size: 12.5px; color: var(--dim); background: transparent;
+      border: 1px solid var(--line); border-radius: 8px; padding: 5px 12px; cursor: pointer;
+    }
+    .modo:hover { background: rgba(255, 255, 255, 0.06); }
+    .modo[aria-pressed="true"] { color: var(--text); background: rgba(255, 255, 255, 0.09); border-color: rgba(160, 185, 220, 0.42); }
+    .modo:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+    #lateral { position: fixed; top: 64px; right: 24px; width: 250px; display: flex; flex-direction: column; gap: 12px; }
+    #lateral[hidden] { display: none; }
+    #ranking, #leyenda {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    #lateral h2 { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+    #r-lista { list-style: none; margin: 0; padding: 0; min-height: 22px; }
+    #r-lista li {
+      display: flex; justify-content: space-between; gap: 10px; padding: 4px 6px; margin: 0 -6px;
+      border-radius: 6px; font-size: 12.5px; cursor: pointer;
+    }
+    #r-lista li:hover { background: rgba(255, 255, 255, 0.07); }
+    #r-lista li[hidden] { display: none; }
+    .r-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .r-valor { flex: none; color: var(--dim); font-variant-numeric: tabular-nums; }
+    .r-valor.mas { color: var(--cyan); }
+    .r-valor.menos { color: var(--amber); }
+
+    .fila { display: flex; align-items: center; gap: 10px; margin: 0 0 7px; font-size: 12px; }
+    .nota { margin: 8px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--dim); }
+    i.arco { flex: none; width: 30px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--amber), var(--cyan)); }
+    i.punto { flex: none; width: 12px; height: 12px; margin: 0 9px; border-radius: 50%; }
+    i.frio { background: #2f8fb8; box-shadow: 0 0 8px #2f8fb8; }
+    i.caliente, i.ambar { background: var(--amber); box-shadow: 0 0 9px var(--amber); }
+    i.cian { background: var(--cyan); box-shadow: 0 0 9px var(--cyan); }
+    i.neutro { background: #4a5d7a; box-shadow: 0 0 6px #4a5d7a; }
+    body[data-modo="actividad"] .solo-balance { display: none; }
+    body[data-modo="balance"] .solo-actividad { display: none; }
+
+    @media (max-width: 640px) {
+      #lateral { display: none; }
+      #titulo { top: 14px; left: 16px; }
+      #reloj { left: 16px; bottom: 116px; }
+      #linea { left: 16px; right: 16px; }
+      #tarjeta { right: 16px; bottom: 214px; }
+    }
+  </style>
 </head>
 <body>
+  <div id="escena"></div>
+  <div id="vineta"></div>
+
+  <header id="titulo">
+    <h1>Un día en BIXI Montréal</h1>
+    <p id="fecha">Cargando viajes…</p>
+    <div id="modos">
+      <button class="modo" id="modo-actividad" type="button" aria-pressed="true">Actividad</button>
+      <button class="modo" id="modo-balance" type="button" aria-pressed="false">Balance de bicis</button>
+    </div>
+  </header>
+
+  <section id="reloj">
+    <div id="hora">--:--</div>
+    <div id="datos">
+      <div><b id="n-curso">0</b><span>viajes en curso</span></div>
+      <div><b id="n-total">0</b><span>viajes iniciados</span></div>
+      <button id="play" type="button">Pausar</button>
+    </div>
+  </section>
+
+  <aside id="tarjeta" hidden>
+    <strong id="t-nombre"></strong>
+    <span id="t-datos"></span>
+  </aside>
+
+  <aside id="lateral">
+    <section id="ranking">
+      <h2 id="r-titulo">Más salidas hasta ahora</h2>
+      <ol id="r-lista"></ol>
+    </section>
+    <section id="leyenda">
+      <h2>Cómo leerlo</h2>
+      <p class="fila"><i class="arco"></i>Un viaje, del origen (ámbar) al destino (cian)</p>
+      <div class="solo-actividad">
+        <p class="fila"><i class="punto frio"></i>Estación tranquila</p>
+        <p class="fila"><i class="punto caliente"></i>Muchos viajes recientes</p>
+      </div>
+      <div class="solo-balance">
+        <p class="fila"><i class="punto cian"></i>Recibe más bicis de las que salen</p>
+        <p class="fila"><i class="punto ambar"></i>Pierde bicis</p>
+        <p class="fila"><i class="punto neutro"></i>Equilibrada</p>
+      </div>
+      <p class="nota solo-actividad">El tamaño crece con la actividad y se enfría en unos 10 minutos simulados.</p>
+      <p class="nota solo-balance">El tamaño indica cuánto se ha desequilibrado desde las 0:00.</p>
+    </section>
+  </aside>
+
+  <section id="linea" aria-label="Viajes a lo largo del día. Haz clic o arrastra para moverte en el tiempo.">
+    <canvas id="hist"></canvas>
+    <div id="ejes"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+  </section>
+
+  <footer id="credito">© OpenStreetMap contributors © CARTO</footer>
+
   <script type="module" src="./main.js"></script>
 </body>
 </html>
